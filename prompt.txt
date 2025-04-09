@@ -1,0 +1,39 @@
+Write Python codes with 2 files:
+- layout.py to define layout with Pydantic.
+- main.py to import layout.py and create a window using tkinter.
+
+The main window contains two panels:
+- Left panel has multiple buttons to switch content of the right panel.
+- Right panel has a table with multiple rows.
+(Like a tab control or pages)
+
+Each row in the table of right panel could have either:
+- File Selection: A button to browse for file and a label to show path of the selected file.
+- Property Viewer: A vertically scrollable table to display properties of a file in the format of key/value pairs.
+- Time Input: A label and a input filed to designate time. Could be a free text input field or a time control in the format of HH:MM:SS.
+- Parameter Input: A label and a text input.
+- Progress Bar: A button to act and a progress bar with graphics and text over the bar.
+- Options: A label and a dropdown list to choose among pre-defined options.
+
+The application have 3 tabs:
+- File Inspection:
+  Row 1: File Selection
+  Row 2: Property Viewer
+- Trim Audio:
+  Row 1: File Selection
+  Row 2: Time Input for start time
+  Row 3: Time Input for duration
+  Row 4: Progress Bar for trimming
+- Loop Video:
+  Row 1: File Selection
+  Row 2: Time Input for duration
+  Row 3: Progress Bar
+- Combine AV:
+  Row 1: File Selection for video
+  Row 2: File Selection for audio
+  Row 3: Options for audio codec: AAC, FLAC.
+  Row 4: Options for sampling rate: 48 kHz, 96 kHz, 128 kHz.
+  Row 5: Options for bit rate: 128k, 256k, 384k.
+  Row 5: Progress Bar
+
+Add a custom function "refresh_file_meta" that is called on file selection in tab File Inspection. I would like to add data to Property Viewer when a file is selected.
