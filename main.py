@@ -1,55 +1,71 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
-import os
 from layout import layout
+from impl import get_file_properties, trim_audio, loop_video, combine_audio_video
 
-# Refresh file metadata and update Property Viewer
-def refresh_file_meta(file_path, active_page):
-    if not file_path:
-        return
+active_page = None  # Tracks the currently active tab
 
-    # Locate the Property Viewer table from the active page (recursive search)
-    table = find_property_viewer_recursive(active_page)
-    if table:
-        # Extract file metadata
-        file_size = os.path.getsize(file_path)  # Get file size in bytes
-        modification_time = os.path.getmtime(file_path)  # Get modification time
-
-        # Format metadata
-        file_properties = {
-            "File Name": os.path.basename(file_path),
-            "File Size": f"{file_size} bytes",
-            "Last Modified": f"{modification_time:.0f}"
-        }
-
-        # Clear previous entries
-        for row in table.get_children():
-            table.delete(row)
-
-        # Add metadata to Property Viewer
-        for key, value in file_properties.items():
-            table.insert("", "end", values=(key, value))
-
-# Recursive function to locate the Property Viewer table
-def find_property_viewer_recursive(parent):
+# Helper functions
+def find_component_recursive(parent, component_type):
     for widget in parent.winfo_children():
-        if isinstance(widget, ttk.Treeview):  # If it's the desired widget (Treeview)
+        if isinstance(widget, component_type):
             return widget
-        # Recursively search in child widgets
-        child_result = find_property_viewer_recursive(widget)
+        child_result = find_component_recursive(widget, component_type)
         if child_result:
             return child_result
     return None
 
-# Create components dynamically
-def create_file_selection(parent, label_text, refresh_func=None, active_page=None):
+def find_components_recursive(parent, component_type):
+    components = []
+    for widget in parent.winfo_children():
+        if isinstance(widget, component_type):
+            components.append(widget)
+        components.extend(find_components_recursive(widget, component_type))
+    return components
+
+# Refresh file metadata and update Property Viewer
+def refresh_file_meta(file_path, active_page):
+    try:
+        table = find_component_recursive(active_page, ttk.Treeview)
+        if table is not None:
+            file_properties = get_file_properties(file_path)
+            if file_properties:
+                # Clear existing entries
+                for row in table.get_children():
+                    table.delete(row)
+                # Insert new file properties into the table
+                for key, value in file_properties.items():
+                    table.insert("", "end", values=(key, value))
+    except Exception as e:
+        print(f"Error in refresh_file_meta: {e}")
+
+def start(active_page, action_callback):
+    try:
+        input_values = {}
+        input_fields = find_components_recursive(active_page, tk.Entry)
+        dropdowns = find_components_recursive(active_page, ttk.Combobox)
+
+        for field in input_fields:
+            label = field.master.winfo_children()[0].cget("text")  # Label associated with input
+            input_values[label] = field.get()
+
+        for dropdown in dropdowns:
+            label = dropdown.master.winfo_children()[0].cget("text")  # Label associated with dropdown
+            input_values[label] = dropdown.get()
+
+        print(f"Input Values: {input_values}")
+        action_callback(input_values, active_page)
+    except Exception as e:
+        print(f"Error in start: {e}")
+
+# Component creation functions
+def create_file_selection(parent, label, refresh_func=None):
     frame = tk.Frame(parent)
-    tk.Label(frame, text=label_text).pack(side="left")
+    tk.Label(frame, text=label).pack(side="left")
     entry = tk.Entry(frame, width=40, state="readonly")
     entry.pack(side="left", padx=5)
-    tk.Button(frame, text="Browse", command=lambda: browse_file(entry, refresh_func, active_page)).pack(side="left")
+    tk.Button(frame, text="Browse", command=lambda: browse_file(entry, refresh_func)).pack(side="left")
     frame.pack(fill="x", pady=5)
-    return frame
 
 def create_property_viewer(parent):
     frame = tk.Frame(parent)
@@ -61,57 +77,69 @@ def create_property_viewer(parent):
     table.configure(yscroll=scrollbar.set)
     scrollbar.pack(side="right", fill="y")
     frame.pack(fill="x", pady=5)
-    return frame
 
-def browse_file(entry, refresh_func=None, active_page=None):
-    file_path = filedialog.askopenfilename()
-    if file_path:
-        entry.config(state="normal")
-        entry.delete(0, tk.END)
-        entry.insert(0, file_path)
-        entry.config(state="readonly")
-        if refresh_func and active_page:
-            refresh_func(file_path, active_page)
+def create_progress_bar(parent, label, callback):
+    frame = tk.Frame(parent)
+    tk.Label(frame, text=label).pack(side="top")
+    progress = ttk.Progressbar(frame, length=200)
+    progress.pack(pady=5)
+    tk.Button(frame, text="Start", command=lambda: start(active_page, callback)).pack()
+    frame.pack(fill="x", pady=5)
 
-def display_tab_content(tab_frame, rows, active_page):
+def browse_file(entry, refresh_func=None):
+    try:
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            entry.config(state="normal")
+            entry.delete(0, "end")
+            entry.insert(0, file_path)
+            entry.config(state="readonly")
+            if refresh_func and active_page:
+                refresh_func(file_path, active_page)
+    except Exception as e:
+        print(f"Error in browse_file: {e}")
+
+def display_tab_content(tab_frame, rows):
     for widget in tab_frame.winfo_children():
         widget.destroy()
     for row in rows:
         for component in row:
             if component.type == "file_selection":
-                create_file_selection(tab_frame, component.label, refresh_func=refresh_file_meta, active_page=active_page)
+                create_file_selection(tab_frame, component.label, refresh_file_meta)
             elif component.type == "property_viewer":
                 create_property_viewer(tab_frame)
+            elif component.type == "progress_bar":
+                if "Trimming" in component.label:
+                    create_progress_bar(tab_frame, component.label, trim_audio)
+                elif "Looping" in component.label:
+                    create_progress_bar(tab_frame, component.label, loop_video)
+                elif "Combining" in component.label:
+                    create_progress_bar(tab_frame, component.label, combine_audio_video)
 
 def switch_tab(tab_name, tab_frame):
+    global active_page
     for tab in layout.tabs:
         if tab.name == tab_name:
-            active_page = tab_frame  # Update the active page variable
-            display_tab_content(tab_frame, tab.rows, active_page)
+            active_page = tab_frame
+            display_tab_content(tab_frame, tab.rows)
             break
 
 # Main Application
 root = tk.Tk()
-root.title("Dynamic GUI with Pydantic Layout")
+root.title("Dynamic GUI Application")
 root.geometry("800x600")
 
-# Left panel for navigation
+# Left and right panels
 left_panel = tk.Frame(root, width=150, bg="lightgray")
 left_panel.pack(side="left", fill="y")
-
-# Right panel for content
 right_panel = tk.Frame(root, bg="white")
 right_panel.pack(side="right", fill="both", expand=True)
 
-# Variable to track the active page
-active_page = right_panel
-
-# Create buttons for switching tabs
+# Tab buttons
 for tab in layout.tabs:
     tk.Button(left_panel, text=tab.name, command=lambda t=tab.name: switch_tab(t, right_panel)).pack(pady=10)
 
-# Display the first tab by default
+# Show first tab by default
 switch_tab(layout.tabs[0].name, right_panel)
 
-# Run the application
 root.mainloop()
