@@ -1,9 +1,35 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
+from tkinter import messagebox
 from layout import layout
 from impl import get_file_properties, trim_audio, loop_video, combine_audio_video
 
 active_page = None  # Tracks the currently active tab
+
+class CustomFrame(tk.Frame):
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.active_page = None  # Track the active page (e.g., tab content)
+
+    # Callback to show overwrite confirmation dialog
+    def ask_user_for_overwrite(self, file_name):
+        return messagebox.askyesno(
+            "File Overwrite Confirmation",
+            f"The file '{file_name}' already exists.\nDo you want to overwrite it?"
+        )
+
+    def find_progress_bar(self):
+        # Iterate through all child widgets of the parent
+        for widget in self.winfo_children():
+            # Check if the widget is a Progress Bar
+            if isinstance(widget, ttk.Progressbar):
+                return widget
+            # Recursively search in child widgets
+            if isinstance(widget, CustomFrame):
+                result = widget.find_progress_bar()
+                if result:
+                    return result
+        return None  # Return None if Progress Bar is not found
 
 # Helper functions
 def find_component_recursive(parent, component_type):
@@ -60,7 +86,7 @@ def start(active_page, action_callback):
 
 # Component creation functions
 def create_file_selection(parent, label, refresh_func=None):
-    frame = tk.Frame(parent)
+    frame = CustomFrame(parent)
     tk.Label(frame, text=label).pack(side="left")
     entry = tk.Entry(frame, width=40, state="readonly")
     entry.pack(side="left", padx=5)
@@ -68,7 +94,7 @@ def create_file_selection(parent, label, refresh_func=None):
     frame.pack(fill="x", pady=5)
 
 def create_property_viewer(parent):
-    frame = tk.Frame(parent)
+    frame = CustomFrame(parent)
     table = ttk.Treeview(frame, columns=("Key", "Value"), show="headings", height=8)
     table.heading("Key", text="Key")
     table.heading("Value", text="Value")
@@ -78,8 +104,14 @@ def create_property_viewer(parent):
     scrollbar.pack(side="right", fill="y")
     frame.pack(fill="x", pady=5)
 
+def create_time_input(parent, label_text):
+    frame = CustomFrame(parent)
+    tk.Label(frame, text=label_text).pack(side="left")
+    tk.Entry(frame, width=10).pack(side="left", padx=5)
+    frame.pack(fill="x", pady=5)
+
 def create_progress_bar(parent, label, callback):
-    frame = tk.Frame(parent)
+    frame = CustomFrame(parent)
     tk.Label(frame, text=label).pack(side="top")
     progress = ttk.Progressbar(frame, length=200)
     progress.pack(pady=5)
@@ -106,6 +138,8 @@ def display_tab_content(tab_frame, rows):
         for component in row:
             if component.type == "file_selection":
                 create_file_selection(tab_frame, component.label, refresh_file_meta)
+            elif component.type == "time_input":
+                create_time_input(tab_frame, component.label)
             elif component.type == "property_viewer":
                 create_property_viewer(tab_frame)
             elif component.type == "progress_bar":
@@ -130,9 +164,9 @@ root.title("Dynamic GUI Application")
 root.geometry("800x600")
 
 # Left and right panels
-left_panel = tk.Frame(root, width=150, bg="lightgray")
+left_panel = CustomFrame(root, width=150, bg="lightgray")
 left_panel.pack(side="left", fill="y")
-right_panel = tk.Frame(root, bg="white")
+right_panel = CustomFrame(root, bg="white")
 right_panel.pack(side="right", fill="both", expand=True)
 
 # Tab buttons

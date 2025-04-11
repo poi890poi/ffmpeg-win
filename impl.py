@@ -1,6 +1,9 @@
+import math
 import os
 import subprocess
 import re
+import threading
+import queue
 
 
 # Define constants for regular expressions
@@ -17,6 +20,24 @@ REGEX_FILE_INFO = (
     r"Duration: (\d+:\d+:\d+\.\d+), start: [\d.]+, bitrate: (\d+ kb/s)"
 )
 
+REGEX_PROGRESS = r"time=(\d+:\d+:\d+\.\d+)"
+
+def duration_to_seconds(duration):
+    try:
+        # Split the duration into hours, minutes, and seconds
+        hours, minutes, seconds = duration.split(":")
+        # Convert hours and minutes to integers, and seconds to a float to support optional decimals
+        hours = int(hours)
+        minutes = int(minutes)
+        seconds = float(seconds)
+
+        # Calculate the total number of seconds
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        return total_seconds
+    except ValueError:
+        print("Invalid format. Please use HH:MM:SS or HH:MM:SS.sss")
+        return None
+
 def get_ffmpeg_audio_stream_info(filename):
     try:
         # Run the `ffmpeg` command to get file information
@@ -28,6 +49,10 @@ def get_ffmpeg_audio_stream_info(filename):
         file_info_match = re.search(REGEX_FILE_INFO, stderr)
         duration = file_info_match.group(1) if file_info_match else "Unknown"
         overall_bitrate = file_info_match.group(2) if file_info_match else "Unknown"
+        stream_info = {
+            "Duration": duration,
+            "Overall Bitrate": overall_bitrate,
+        }
 
         # Search for the audio stream information using the constant regular expression
         match = re.search(REGEX_AUDIO_STREAM, stderr)
@@ -39,17 +64,16 @@ def get_ffmpeg_audio_stream_info(filename):
             bitrate = match.group(5)  # Extract bitrate (e.g., 12288 kb/s)
 
             # Return the parsed information
-            return {
-                "Duration": duration,
+            stream_info.update({
                 "Bitrate": bitrate,
                 "Codec": codec,
                 "Sampling Rate": sampling_rate,
                 "Channels": channels,
                 "Bit Depth": bit_depth,
-            }
+            })
         else:
             print("Audio stream information not found.")
-            return None
+        return stream_info
 
     except Exception as e:
         print(f"Error while getting ffmpeg audio stream info: {e}")
@@ -69,6 +93,43 @@ def get_file_properties(file_path):
         print(f"Error in get_file_properties: {e}")
         return None
 
+import subprocess
+
+def run_ffmpeg_loop(input_file, output_file, loop_times, truncate_duration, output_queue):
+    print(run_ffmpeg_loop, input_file, output_file, loop_times, truncate_duration)
+    def target():
+      try:
+          # Build the FFmpeg command
+          command = [
+              "ffmpeg",
+              "-y",
+              "-stream_loop", str(loop_times),
+              "-i", input_file,
+              "-t", str(truncate_duration),
+              output_file
+          ]
+
+          print(command)
+          
+          # Run the command
+          process = subprocess.Popen(
+              command,
+              stdout=subprocess.PIPE, 
+              stderr=subprocess.PIPE, 
+              text=True
+          )
+          
+          # Capture output in real-time
+          for line in process.stderr:
+              # print(line.strip())  # Print to console (or parse to update UI)
+              output_queue.put(line.strip())
+              # yield line.strip()   # Yield output for progress bar parsing
+
+      except Exception as e:
+          print(f"Error while running FFmpeg: {e}")
+
+    threading.Thread(target=target).start()
+
 def trim_audio(input_values, active_page):
     try:
         # Example external program call
@@ -79,11 +140,60 @@ def trim_audio(input_values, active_page):
     except Exception as e:
         print(f"Error in trim_audio: {e}")
 
+def parse_progress(ffmpeg_output):
+    # Match progress info like "frame=123 time=00:00:02.50 ..."
+    match = re.search(REGEX_PROGRESS, ffmpeg_output)
+    if match:
+        current_time = match.group(1)
+        print(f"Current processing time: {current_time}")
+        return(duration_to_seconds(current_time))
+
+# Timer thread to update the progress bar
+def update_progress_bar_with_timer(active_page, output_queue, total_duration):
+    def update():
+        while not output_queue.empty():
+            line = output_queue.get()
+            print(line)
+            current_time = parse_progress(line)
+            # Update the progress bar here (e.g., calculate percentage)
+            if current_time is not None:
+              percent = int(current_time / total_duration * 100)
+              print('step', current_time, total_duration, percent)
+              active_page.find_progress_bar()['value'] = percent
+
+        # Schedule the next update
+        threading.Timer(0.1, update).start()
+
+    update()
+
 def loop_video(input_values, active_page):
     try:
         # Example external program call
         file_path = input_values.get("Select File")
         duration = input_values.get("Duration")
+        dir, filename = os.path.split(file_path)
+        _, ext = os.path.splitext(filename)
+        output_file = os.path.join(dir, f'default{ext}')
+
+        # Check if output_file exist and ask for confirmation on overwriting.
+        if os.path.isfile(output_file):
+            user_response = active_page.ask_user_for_overwrite(output_file)
+            if user_response:  # If user confirmed overwrite
+                ...
+            else:  # If user declined overwrite
+                print("User canceled the operation.")
+                return False
+
+        file_properties = get_ffmpeg_audio_stream_info(file_path)
+        duration_src = duration_to_seconds(file_properties['Duration'])
+        duration_target = duration_to_seconds(duration)
+        loop_times = math.ceil(duration_target / duration_src)
+
+        # Queue to handle output between threads
+        output_queue = queue.Queue()
+
+        run_ffmpeg_loop(file_path, output_file, loop_times, duration, output_queue)
+        update_progress_bar_with_timer(active_page, output_queue, duration_target)
         print(f"Looping video: {file_path}, Duration: {duration}")
     except Exception as e:
         print(f"Error in loop_video: {e}")
