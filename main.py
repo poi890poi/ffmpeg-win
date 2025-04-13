@@ -31,6 +31,11 @@ class CustomFrame(tk.Frame):
                     return result
         return None  # Return None if Progress Bar is not found
 
+# Function to close the window
+def close_window(event=None):
+    print("Escape key pressed. Closing window...")
+    root.destroy()
+
 # Helper functions
 def find_component_recursive(parent, component_type):
     for widget in parent.winfo_children():
@@ -72,12 +77,20 @@ def start(active_page, action_callback):
         dropdowns = find_components_recursive(active_page, ttk.Combobox)
 
         for field in input_fields:
-            label = field.master.winfo_children()[0].cget("text")  # Label associated with input
-            input_values[label] = field.get()
+            print(field)
+            try:
+                label = field.master.winfo_children()[0].cget("text")  # Label associated with input
+                input_values[label] = field.get()
+            except tk.TclError:
+                ...
 
         for dropdown in dropdowns:
-            label = dropdown.master.winfo_children()[0].cget("text")  # Label associated with dropdown
-            input_values[label] = dropdown.get()
+            print(dropdown)
+            try:
+                label = dropdown.master.winfo_children()[0].cget("text")  # Label associated with dropdown
+                input_values[label] = dropdown.get()
+            except tk.TclError:
+                ...
 
         print(f"Input Values: {input_values}")
         action_callback(input_values, active_page)
@@ -104,18 +117,45 @@ def create_property_viewer(parent):
     scrollbar.pack(side="right", fill="y")
     frame.pack(fill="x", pady=5)
 
-def create_time_input(parent, label_text):
+def create_time_input(parent, component):
+    label_text = component.label
+    default = component.default
     frame = CustomFrame(parent)
     tk.Label(frame, text=label_text).pack(side="left")
-    tk.Entry(frame, width=10).pack(side="left", padx=5)
+    input_entry = tk.Entry(frame, width=10)
+    input_entry.pack(side="left", padx=5)
     frame.pack(fill="x", pady=5)
+    if default is not None:
+        input_entry.insert(0, default)  # Default value
 
-def create_progress_bar(parent, label, callback):
+def create_text_input(parent, component):
+    label_text = component.label
+    default = component.default
     frame = CustomFrame(parent)
-    tk.Label(frame, text=label).pack(side="top")
+    tk.Label(frame, text=label_text).pack(side="left")
+    input_entry = tk.Entry(frame, width=10)
+    input_entry.pack(side="left", padx=5)
+    frame.pack(fill="x", pady=5)
+    if default is not None:
+        input_entry.insert(0, default)  # Default value
+
+def create_button(parent, component):
+    button_text = component.label
+    frame = CustomFrame(parent)
+    callback = None
+    print(active_tab.name, ("Loop Video" in active_tab.name))
+    if "Loop Video" in active_tab.name:
+        callback = loop_video
+    tk.Button(frame, text=button_text, command=lambda: start(active_page, callback)).pack()
+    frame.pack(fill="x", pady=5)
+    root.bind("<Return>", lambda event: start(active_page, callback))
+
+def create_progress_bar(parent, label):
+    print('create_progress_bar', label)
+    frame = CustomFrame(parent)
     progress = ttk.Progressbar(frame, length=200)
-    progress.pack(pady=5)
-    tk.Button(frame, text="Start", command=lambda: start(active_page, callback)).pack()
+    progress.pack(side="left")
+    tk.Entry(frame, width=10).pack(side="left", padx=5)
     frame.pack(fill="x", pady=5)
 
 def browse_file(entry, refresh_func=None):
@@ -139,29 +179,32 @@ def display_tab_content(tab_frame, rows):
             if component.type == "file_selection":
                 create_file_selection(tab_frame, component.label, refresh_file_meta)
             elif component.type == "time_input":
-                create_time_input(tab_frame, component.label)
+                create_time_input(tab_frame, component)
+            elif component.type == "text_input":
+                create_text_input(tab_frame, component)
+            elif component.type == "button":
+                create_button(tab_frame, component)
             elif component.type == "property_viewer":
                 create_property_viewer(tab_frame)
             elif component.type == "progress_bar":
-                if "Trimming" in component.label:
-                    create_progress_bar(tab_frame, component.label, trim_audio)
-                elif "Looping" in component.label:
-                    create_progress_bar(tab_frame, component.label, loop_video)
-                elif "Combining" in component.label:
-                    create_progress_bar(tab_frame, component.label, combine_audio_video)
+                create_progress_bar(tab_frame, component.label)
 
 def switch_tab(tab_name, tab_frame):
+    print(tab_name, tab_frame)
     global active_page
+    global active_tab
     for tab in layout.tabs:
         if tab.name == tab_name:
+            active_tab = tab
             active_page = tab_frame
             display_tab_content(tab_frame, tab.rows)
             break
 
 # Main Application
 root = tk.Tk()
-root.title("Dynamic GUI Application")
+root.title("FFMPEG for the Win")
 root.geometry("800x600")
+root.bind("<Escape>", close_window)
 
 # Left and right panels
 left_panel = CustomFrame(root, width=150, bg="lightgray")

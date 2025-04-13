@@ -4,6 +4,7 @@ from typing import List, Optional
 class Component(BaseModel):
     type: str  # Type of the component (e.g., "file_selection", "property_viewer", etc.)
     label: str  # Label for the component
+    default: Optional[str] = None  # Default value for the component
     options: Optional[List[str]] = None  # Options for dropdown lists (if applicable)
 
 class Tab(BaseModel):
@@ -35,8 +36,10 @@ layout = Layout(
             name="Loop Video",
             rows=[
                 [Component(type="file_selection", label="Select File")],
-                [Component(type="time_input", label="Duration")],
-                [Component(type="progress_bar", label="Looping Progress")]
+                [Component(type="text_input", label="Output File", default="default")],
+                [Component(type="time_input", label="Duration", default="00:02:00")],
+                [Component(type="button", label="Start")],
+                [Component(type="progress_bar", label="Looping Progress")],
             ]
         ),
         Tab(

@@ -6,6 +6,8 @@ import threading
 import queue
 
 
+TASK_COMPLETION_SIGNAL = "===TASK_COMPLETION_SIGNAL==="
+
 # Define constants for regular expressions
 REGEX_AUDIO_STREAM = (
     r"Stream #\d+:\d+: Audio: (\w+)"  # Codec (e.g., pcm_f32le, flac)
@@ -125,6 +127,9 @@ def run_ffmpeg_loop(input_file, output_file, loop_times, truncate_duration, outp
               output_queue.put(line.strip())
               # yield line.strip()   # Yield output for progress bar parsing
 
+          process.wait()
+          output_queue.put(TASK_COMPLETION_SIGNAL)
+
       except Exception as e:
           print(f"Error while running FFmpeg: {e}")
 
@@ -160,6 +165,10 @@ def update_progress_bar_with_timer(active_page, output_queue, total_duration):
               percent = int(current_time / total_duration * 100)
               print('step', current_time, total_duration, percent)
               active_page.find_progress_bar()['value'] = percent
+            else:
+              if TASK_COMPLETION_SIGNAL in line:
+                print(TASK_COMPLETION_SIGNAL)
+                return True
 
         # Schedule the next update
         threading.Timer(0.1, update).start()
@@ -185,7 +194,11 @@ def loop_video(input_values, active_page):
                 return False
 
         file_properties = get_ffmpeg_audio_stream_info(file_path)
-        duration_src = duration_to_seconds(file_properties['Duration'])
+        print(file_properties['Duration'])
+        if ":" in file_properties['Duration']:
+          duration_src = duration_to_seconds(file_properties['Duration'])
+        else:
+          duration_src = int(file_properties['Duration'])
         duration_target = duration_to_seconds(duration)
         loop_times = math.ceil(duration_target / duration_src)
 
