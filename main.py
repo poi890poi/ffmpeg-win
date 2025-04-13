@@ -103,12 +103,14 @@ def create_file_selection(parent, label, refresh_func=None):
     tk.Label(frame, text=label).pack(side="left")
     entry = tk.Entry(frame, width=40, state="readonly")
     entry.pack(side="left", padx=5)
-    tk.Button(frame, text="Browse", command=lambda: browse_file(entry, refresh_func)).pack(side="left")
+    tk.Button(frame, text="Browse", command=lambda: browse_file(
+        entry, refresh_func)).pack(side="left")
     frame.pack(fill="x", pady=5)
 
 def create_property_viewer(parent):
     frame = CustomFrame(parent)
-    table = ttk.Treeview(frame, columns=("Key", "Value"), show="headings", height=8)
+    table = ttk.Treeview(frame, columns=("Key", "Value"),
+                         show="headings", height=8)
     table.heading("Key", text="Key")
     table.heading("Value", text="Value")
     table.pack(side="left", fill="x", expand=True)
@@ -146,9 +148,22 @@ def create_button(parent, component):
     print(active_tab.name, ("Loop Video" in active_tab.name))
     if "Loop Video" in active_tab.name:
         callback = loop_video
-    tk.Button(frame, text=button_text, command=lambda: start(active_page, callback)).pack()
+    tk.Button(frame, text=button_text, command=lambda: start(
+        active_page, callback)).pack()
     frame.pack(fill="x", pady=5)
     root.bind("<Return>", lambda event: start(active_page, callback))
+
+def create_options(parent, component):
+    label_text = component.label
+    options = component.options
+    default = component.default
+    frame = CustomFrame(parent)
+    tk.Label(frame, text=label_text).pack(side="left")
+    combo_box = ttk.Combobox(frame, values=options)
+    combo_box.pack(side="left", padx=5)
+    frame.pack(fill="x", pady=5)
+    if default is not None:
+        combo_box.set(default)  # Default value
 
 def create_progress_bar(parent, label):
     print('create_progress_bar', label)
@@ -177,13 +192,16 @@ def display_tab_content(tab_frame, rows):
     for row in rows:
         for component in row:
             if component.type == "file_selection":
-                create_file_selection(tab_frame, component.label, refresh_file_meta)
+                create_file_selection(tab_frame, component.label,
+                                      refresh_file_meta)
             elif component.type == "time_input":
                 create_time_input(tab_frame, component)
             elif component.type == "text_input":
                 create_text_input(tab_frame, component)
             elif component.type == "button":
                 create_button(tab_frame, component)
+            elif component.type == "options":
+                create_options(tab_frame, component)
             elif component.type == "property_viewer":
                 create_property_viewer(tab_frame)
             elif component.type == "progress_bar":
@@ -214,7 +232,8 @@ right_panel.pack(side="right", fill="both", expand=True)
 
 # Tab buttons
 for tab in layout.tabs:
-    tk.Button(left_panel, text=tab.name, command=lambda t=tab.name: switch_tab(t, right_panel)).pack(pady=10)
+    tk.Button(left_panel, text=tab.name, command=lambda t=tab.name:
+              switch_tab(t, right_panel)).pack(pady=10)
 
 # Show first tab by default
 switch_tab(layout.tabs[0].name, right_panel)

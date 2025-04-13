@@ -44,7 +44,8 @@ def get_ffmpeg_audio_stream_info(filename):
     try:
         # Run the `ffmpeg` command to get file information
         command = ["ffmpeg", "-i", filename]
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen(
+            command,stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         _, stderr = process.communicate()  # Capture stderr output for metadata
 
         # Parse file info for duration and bitrate
@@ -97,7 +98,8 @@ def get_file_properties(file_path):
 
 import subprocess
 
-def run_ffmpeg_loop(input_file, output_file, loop_times, truncate_duration, output_queue):
+def run_ffmpeg_loop(input_file, output_file,
+                    loop_times, truncate_duration, output_queue):
     print(run_ffmpeg_loop, input_file, output_file, loop_times, truncate_duration)
     def target():
       try:
@@ -205,8 +207,10 @@ def loop_video(input_values, active_page):
         # Queue to handle output between threads
         output_queue = queue.Queue()
 
-        run_ffmpeg_loop(file_path, output_file, loop_times, duration, output_queue)
-        update_progress_bar_with_timer(active_page, output_queue, duration_target)
+        run_ffmpeg_loop(file_path, output_file,
+                        loop_times, duration, output_queue)
+        update_progress_bar_with_timer(active_page,
+                                       output_queue, duration_target)
         print(f"Looping video: {file_path}, Duration: {duration}")
     except Exception as e:
         print(f"Error in loop_video: {e}")
