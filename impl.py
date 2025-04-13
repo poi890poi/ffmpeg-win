@@ -4,6 +4,9 @@ import subprocess
 import re
 import threading
 import queue
+import time
+
+from util import *
 
 
 TASK_COMPLETION_SIGNAL = "===TASK_COMPLETION_SIGNAL==="
@@ -22,23 +25,7 @@ REGEX_FILE_INFO = (
     r"Duration: (\d+:\d+:\d+\.\d+), start: [\d.]+, bitrate: (\d+ kb/s)"
 )
 
-REGEX_PROGRESS = r"time=(\d+:\d+:\d+\.\d+)"
-
-def duration_to_seconds(duration):
-    try:
-        # Split the duration into hours, minutes, and seconds
-        hours, minutes, seconds = duration.split(":")
-        # Convert hours and minutes to integers, and seconds to a float to support optional decimals
-        hours = int(hours)
-        minutes = int(minutes)
-        seconds = float(seconds)
-
-        # Calculate the total number of seconds
-        total_seconds = hours * 3600 + minutes * 60 + seconds
-        return total_seconds
-    except ValueError:
-        print("Invalid format. Please use HH:MM:SS or HH:MM:SS.sss")
-        return None
+REGEX_PROGRESS = r"time=(\d+:\d+:\d+\.\d+) bitrate=(\d+\.\d+kbits/s) speed=(\d+\.\d+x)"
 
 def get_ffmpeg_audio_stream_info(filename):
     try:
@@ -152,30 +139,41 @@ def parse_progress(ffmpeg_output):
     match = re.search(REGEX_PROGRESS, ffmpeg_output)
     if match:
         current_time = match.group(1)
+        bitrate = match.group(2)
+        speed = match.group(3)
         print(f"Current processing time: {current_time}")
         return(duration_to_seconds(current_time))
 
 # Timer thread to update the progress bar
 def update_progress_bar_with_timer(active_page, output_queue, total_duration):
-    def update():
+    def update(time_start):
         while not output_queue.empty():
+            now = time.time()
+            elapsed = now - time_start
             line = output_queue.get()
-            print(line)
             current_time = parse_progress(line)
             # Update the progress bar here (e.g., calculate percentage)
             if current_time is not None:
-              percent = int(current_time / total_duration * 100)
-              print('step', current_time, total_duration, percent)
-              active_page.find_progress_bar()['value'] = percent
+                percent = current_time / total_duration
+                ete = elapsed / percent
+                remaining = ete - elapsed
+                eta = now + remaining
+                print(line, f'elapsed: {elapsed}')
+                print('step', current_time, total_duration, percent)
+                active_page.find_progress_bar()['value'] = int(percent * 100)
+                active_page.set_entry("progress_text", (
+                    f'elapsed: {convert_seconds_to_hhmmss(elapsed)}, '
+                    f'remaining: {convert_seconds_to_hhmmss(remaining)}, '
+                    f'eta: {convert_epoch_to_hhmmss(eta)}'))
             else:
               if TASK_COMPLETION_SIGNAL in line:
                 print(TASK_COMPLETION_SIGNAL)
                 return True
 
         # Schedule the next update
-        threading.Timer(0.1, update).start()
+        threading.Timer(0.1, update, args=(time_start,)).start()
 
-    update()
+    update(time.time())
 
 def loop_video(input_values, active_page):
     try:
@@ -184,7 +182,8 @@ def loop_video(input_values, active_page):
         duration = input_values.get("Duration")
         dir, filename = os.path.split(file_path)
         _, ext = os.path.splitext(filename)
-        output_file = os.path.join(dir, f'default{ext}')
+        output_file = input_values.get("Output File")
+        output_file = os.path.join(dir, f'{output_file}{ext}')
 
         # Check if output_file exist and ask for confirmation on overwriting.
         if os.path.isfile(output_file):
@@ -197,10 +196,7 @@ def loop_video(input_values, active_page):
 
         file_properties = get_ffmpeg_audio_stream_info(file_path)
         print(file_properties['Duration'])
-        if ":" in file_properties['Duration']:
-          duration_src = duration_to_seconds(file_properties['Duration'])
-        else:
-          duration_src = int(file_properties['Duration'])
+        duration_src = duration_to_seconds(file_properties['Duration'])
         duration_target = duration_to_seconds(duration)
         loop_times = math.ceil(duration_target / duration_src)
 

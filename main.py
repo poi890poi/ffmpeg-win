@@ -21,6 +21,7 @@ class CustomFrame(tk.Frame):
     def find_progress_bar(self):
         # Iterate through all child widgets of the parent
         for widget in self.winfo_children():
+            print(widget.winfo_name())
             # Check if the widget is a Progress Bar
             if isinstance(widget, ttk.Progressbar):
                 return widget
@@ -30,6 +31,26 @@ class CustomFrame(tk.Frame):
                 if result:
                     return result
         return None  # Return None if Progress Bar is not found
+
+    def find_widget(self, name):
+        # Iterate through all child widgets of the parent
+        for widget in self.winfo_children():
+            if widget.winfo_name() == name:
+                return widget
+            # Recursively search in child widgets
+            if isinstance(widget, CustomFrame):
+                result = widget.find_widget(name)
+                if result:
+                    return result
+        return None  # Return None if Progress Bar is not found
+
+    def set_entry(self, name, text):
+        print(name, text)
+        entry = self.find_widget(name)
+        entry.configure(state="normal") 
+        entry.delete(0, tk.END)
+        entry.insert(0, text)
+        entry.configure(state="readonly") 
 
 # Function to close the window
 def close_window(event=None):
@@ -165,12 +186,14 @@ def create_options(parent, component):
     if default is not None:
         combo_box.set(default)  # Default value
 
-def create_progress_bar(parent, label):
+def create_progress_bar(parent, component):
+    label = component.label
     print('create_progress_bar', label)
     frame = CustomFrame(parent)
     progress = ttk.Progressbar(frame, length=200)
     progress.pack(side="left")
-    tk.Entry(frame, width=10).pack(side="left", padx=5)
+    tk.Entry(frame, width=60, name="progress_text", state="readonly").pack(
+        side="left", padx=5)
     frame.pack(fill="x", pady=5)
 
 def browse_file(entry, refresh_func=None):
@@ -205,7 +228,7 @@ def display_tab_content(tab_frame, rows):
             elif component.type == "property_viewer":
                 create_property_viewer(tab_frame)
             elif component.type == "progress_bar":
-                create_progress_bar(tab_frame, component.label)
+                create_progress_bar(tab_frame, component)
 
 def switch_tab(tab_name, tab_frame):
     print(tab_name, tab_frame)
