@@ -3,8 +3,8 @@ from typing import List, Optional
 
 
 AUDIO_CODECS = {
-    "FLAC": "FLAC",
-    "AAC": "AAC",
+    "FLAC": "flac",
+    "AAC": "aac",
 }
 
 SAMPLING_RATES = {
@@ -27,6 +27,7 @@ class Component(BaseModel):
 
 class Tab(BaseModel):
     name: str  # Name of the tab
+    callback: str
     rows: List[List[Component]]  # Rows of components in the tab
 
 class Layout(BaseModel):
@@ -36,6 +37,7 @@ layout = Layout(
     tabs=[
         Tab(
             name="File Inspection",
+            callback="None",
             rows=[
                 [Component(type="file_selection", label="Select File")],
                 [Component(type="property_viewer", label="File Properties")]
@@ -43,18 +45,22 @@ layout = Layout(
         ),
         Tab(
             name="Trim Audio",
+            callback="trim_audio",
             rows=[
                 [Component(type="file_selection", label="Select File")],
-                [Component(type="time_input", label="Start Time")],
-                [Component(type="time_input", label="Duration")],
+                [Component(type="text_input", label="Output File", default="")],
+                [Component(type="time_input", label="Start Time", default="00:00:00")],
+                [Component(type="time_input", label="Duration", default="11:59:59")],
+                [Component(type="button", label="Start")],
                 [Component(type="progress_bar", label="Trimming Progress")]
             ]
         ),
         Tab(
             name="Loop Video",
+            callback="loop_video",
             rows=[
                 [Component(type="file_selection", label="Select File")],
-                [Component(type="text_input", label="Output File", default="loop_video")],
+                [Component(type="text_input", label="Output File", default="")],
                 [Component(type="time_input", label="Duration", default="00:02:00")],
                 [Component(type="button", label="Start")],
                 [Component(type="progress_bar", label="Looping Progress")],
@@ -62,15 +68,18 @@ layout = Layout(
         ),
         Tab(
             name="Combine A&V",
+            callback="combine_audio_video",
             rows=[
                 [Component(type="file_selection", label="Select Video File")],
                 [Component(type="file_selection", label="Select Audio File")],
+                [Component(type="text_input", label="Output File", default="")],
                 [Component(type="options", label="Audio Codec",
                            options=AUDIO_CODECS.keys(), default="AAC")],
                 [Component(type="options", label="Sampling Rate", 
                            options=SAMPLING_RATES.keys(), default="96 kHz")],
                 [Component(type="options", label="Bit Rate", 
                            options=BIT_RATES.keys(), default="384k")],
+                [Component(type="button", label="Start")],
                 [Component(type="progress_bar", label="Combining Progress")]
             ]
         )

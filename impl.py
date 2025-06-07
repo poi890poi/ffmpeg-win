@@ -5,9 +5,14 @@ import re
 import threading
 import queue
 import time
+import sys
 
 from util import *
+from layout import AUDIO_CODECS, SAMPLING_RATES, BIT_RATES
 
+
+logger = get_logger("ffmpeg-win")
+sys.stdout = LoggerWriter(logger)
 
 TASK_COMPLETION_SIGNAL = "===TASK_COMPLETION_SIGNAL==="
 
@@ -128,11 +133,62 @@ def trim_audio(input_values, active_page):
     try:
         # Example external program call
         file_path = input_values.get("Select File")
+        file_properties = get_ffmpeg_audio_stream_info(file_path)
         start_time = input_values.get("Start Time")
+        start_time = duration_to_seconds(start_time)
         duration = input_values.get("Duration")
+        duration = duration_to_seconds(duration)
+        dir, filename = os.path.split(file_path)
+        input_file, ext = os.path.splitext(filename)
+        output_file = input_values.get("Output File")
+        if output_file:
+            output_file = os.path.join(dir, f'{output_file}{ext}')
+        else:
+            output_file = os.path.join(dir, f'{input_file}_trimmed{ext}')
         print(f"Trimming audio: {file_path}, Start: {start_time}, Duration: {duration}")
     except Exception as e:
         print(f"Error in trim_audio: {e}")
+
+    # Queue to handle output between threads
+    output_queue = queue.Queue()
+    def target():
+        try:
+            # Build the FFmpeg command
+            command = [
+                "ffmpeg",
+                "-i", file_path,
+                "-ss", str(start_time),
+                "-t", str(duration),
+                "-c", "copy",
+                output_file
+            ]
+
+            print(command)
+            
+            # Run the command
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                text=True
+            )
+            
+            # Capture output in real-time
+            for line in process.stderr:
+                # print(line.strip())  # Print to console (or parse to update UI)
+                output_queue.put(line.strip())
+                # yield line.strip()   # Yield output for progress bar parsing
+
+            process.wait()
+            output_queue.put(TASK_COMPLETION_SIGNAL)
+
+        except Exception as e:
+            print(f"Error while running FFmpeg: {e}")
+
+    threading.Thread(target=target).start()
+    update_progress_bar_with_timer(active_page,
+                                    output_queue, duration)
+    print(f"Trimming vaudio: {file_path}, Duration: {duration}")
 
 def parse_progress(ffmpeg_output):
     # Match progress info like "frame=123 time=00:00:02.50 ..."
@@ -143,6 +199,8 @@ def parse_progress(ffmpeg_output):
         speed = match.group(3)
         print(f"Current processing time: {current_time}")
         return(duration_to_seconds(current_time))
+    else:
+        print(ffmpeg_output)
 
 # Timer thread to update the progress bar
 def update_progress_bar_with_timer(active_page, output_queue, total_duration):
@@ -155,7 +213,8 @@ def update_progress_bar_with_timer(active_page, output_queue, total_duration):
             # Update the progress bar here (e.g., calculate percentage)
             if current_time is not None:
                 percent = current_time / total_duration
-                ete = elapsed / percent
+                if percent: ete = elapsed / percent
+                else: ete = 0
                 remaining = ete - elapsed
                 eta = now + remaining
                 print(line, f'elapsed: {elapsed}')
@@ -181,9 +240,12 @@ def loop_video(input_values, active_page):
         file_path = input_values.get("Select File")
         duration = input_values.get("Duration")
         dir, filename = os.path.split(file_path)
-        _, ext = os.path.splitext(filename)
+        input_file, ext = os.path.splitext(filename)
         output_file = input_values.get("Output File")
-        output_file = os.path.join(dir, f'{output_file}{ext}')
+        if output_file:
+            output_file = os.path.join(dir, f'{output_file}{ext}')
+        else:
+            output_file = os.path.join(dir, f'{input_file}_loop{ext}')
 
         # Check if output_file exist and ask for confirmation on overwriting.
         if os.path.isfile(output_file):
@@ -216,9 +278,67 @@ def combine_audio_video(input_values, active_page):
         # Example external program call
         video_file = input_values.get("Select Video File")
         audio_file = input_values.get("Select Audio File")
-        audio_codec = input_values.get("Audio Codec")
-        sampling_rate = input_values.get("Sampling Rate")
-        bit_rate = input_values.get("Bit Rate")
-        print(f"Combining video and audio: Video: {video_file}, Audio: {audio_file}, Codec: {audio_codec}, Sample Rate: {sampling_rate}, Bit Rate: {bit_rate}")
+        file_properties = get_ffmpeg_audio_stream_info(video_file)
+        print(file_properties['Duration'])
+        duration_video = duration_to_seconds(file_properties['Duration'])
+        file_properties = get_ffmpeg_audio_stream_info(audio_file)
+        print(file_properties['Duration'])
+        duration_audio = duration_to_seconds(file_properties['Duration'])
+        audio_codec = AUDIO_CODECS[input_values.get("Audio Codec")]
+        sampling_rate = SAMPLING_RATES[input_values.get("Sampling Rate")]
+        bit_rate = BIT_RATES[input_values.get("Bit Rate")]
+        dir, filename = os.path.split(video_file)
+        input_file, ext = os.path.splitext(filename)
+        output_file = input_values.get("Output File")
+        if output_file:
+            output_file = os.path.join(dir, f'{output_file}{ext}')
+        else:
+            output_file = os.path.join(dir, f'{input_file}_audio{ext}')
+        print((f"Combining video and audio: Video: {video_file}"
+              f", Audio: {audio_file}, Codec: {audio_codec}"
+              f", Sample Rate: {sampling_rate}, Bit Rate: {bit_rate}"))
     except Exception as e:
         print(f"Error in combine_audio_video: {e}")
+
+    # Queue to handle output between threads
+    output_queue = queue.Queue()
+    def target():
+        try:
+            # Build the FFmpeg command
+            command = [
+                "ffmpeg",
+                "-i", video_file,
+                "-i", audio_file,
+                "-c:v", "copy",
+                "-c:a", audio_codec,
+                "-b:a", bit_rate,
+                "-ar", sampling_rate,
+                "-shortest",
+                output_file
+            ]
+
+            print(command)
+          
+            # Run the command
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                text=True
+            )
+            
+            # Capture output in real-time
+            for line in process.stderr:
+                # print(line.strip())  # Print to console (or parse to update UI)
+                output_queue.put(line.strip())
+                # yield line.strip()   # Yield output for progress bar parsing
+
+            process.wait()
+            output_queue.put(TASK_COMPLETION_SIGNAL)
+
+        except Exception as e:
+            print(f"Error while running FFmpeg: {e}")
+
+    threading.Thread(target=target).start()
+    update_progress_bar_with_timer(active_page,
+        output_queue, min(duration_video, duration_audio))
